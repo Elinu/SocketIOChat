@@ -7,12 +7,14 @@
 //
 
 import UIKit
+import SocketIO
 
 class SocketIOManager: NSObject {
     static let sharedInstance = SocketIOManager()
     
-    var socket: SocketIOClient = SocketIOClient(socketURL: NSURL(string: "http://192.168.1.XXX:3000")!)
-    
+    #warning("Set your device IP and port")
+    private(set) lazy var socketMgr: SocketManager = SocketManager(socketURL: URL(string: "https://192.168.1.5:443")!, config: [.log(true), .selfSigned(true), .sessionDelegate(self)])
+    private(set) lazy var socket: SocketIOClient = socketMgr.defaultSocket
     
     override init() {
         super.init()
@@ -29,11 +31,10 @@ class SocketIOManager: NSObject {
     }
     
     
-    func connectToServerWithNickname(nickname: String, completionHandler: (userList: [[String: AnyObject]]!) -> Void) {
+    func connectToServerWithNickname(nickname: String, completionHandler: @escaping (_ userList: [[String: AnyObject]]?) -> Void) {
         socket.emit("connectUser", nickname)
-        
-        socket.on("userList") { ( dataArray, ack) -> Void in
-            completionHandler(userList: dataArray[0] as! [[String: AnyObject]])
+        socket.on("userList") { (dataArray, ack) in
+            completionHandler(dataArray[0] as? [[String: AnyObject]])
         }
         
         listenForOtherMessages()
@@ -51,29 +52,33 @@ class SocketIOManager: NSObject {
     }
     
     
-    func getChatMessage(completionHandler: (messageInfo: [String: AnyObject]) -> Void) {
+    func getChatMessage(completionHandler: @escaping (_ messageInfo: [String: AnyObject]) -> Void) {
         socket.on("newChatMessage") { (dataArray, socketAck) -> Void in
             var messageDictionary = [String: AnyObject]()
-            messageDictionary["nickname"] = dataArray[0] as! String
-            messageDictionary["message"] = dataArray[1] as! String
-            messageDictionary["date"] = dataArray[2] as! String
+            messageDictionary["nickname"] = dataArray[0] as! String as AnyObject
+            messageDictionary["message"] = dataArray[1] as! String as AnyObject
+            messageDictionary["date"] = dataArray[2] as! String as AnyObject
             
-            completionHandler(messageInfo: messageDictionary)
+            completionHandler(messageDictionary)
         }
     }
     
     
     private func listenForOtherMessages() {
         socket.on("userConnectUpdate") { (dataArray, socketAck) -> Void in
-            NSNotificationCenter.defaultCenter().postNotificationName("userWasConnectedNotification", object: dataArray[0] as! [String: AnyObject])
+            NotificationCenter.default.post(name: NSNotification.Name("userWasConnectedNotification"), object: dataArray[0] as! [String: AnyObject], userInfo: nil)
         }
         
         socket.on("userExitUpdate") { (dataArray, socketAck) -> Void in
-            NSNotificationCenter.defaultCenter().postNotificationName("userWasDisconnectedNotification", object: dataArray[0] as! String)
+            NotificationCenter.default.post(name: NSNotification.Name(rawValue: "userWasDisconnectedNotification"), object: dataArray[0] as! String)
         }
         
         socket.on("userTypingUpdate") { (dataArray, socketAck) -> Void in
-            NSNotificationCenter.defaultCenter().postNotificationName("userTypingNotification", object: dataArray[0] as? [String: AnyObject])
+            NotificationCenter.default.post(name: NSNotification.Name(rawValue: "userTypingNotification"), object: dataArray[0] as? [String: AnyObject])
+        }
+        
+        socket.on("newChatMessage") { (dataArray, socketAck) in
+            NotificationCenter.default.post(name: NSNotification.Name(rawValue: "receiveNewMessage"), object: dataArray[0] as? [String: AnyObject])
         }
     }
     
@@ -85,5 +90,12 @@ class SocketIOManager: NSObject {
     
     func sendStopTypingMessage(nickname: String) {
         socket.emit("stopType", nickname)
+    }
+}
+
+
+extension SocketIOManager: URLSessionDelegate {
+    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        completionHandler(.useCredential, URLCredential(trust: challenge.protectionSpace.serverTrust!))
     }
 }

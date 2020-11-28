@@ -9,6 +9,7 @@
 import UIKit
 
 class UsersViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
+    
 
     @IBOutlet weak var tblUserList: UITableView!
     
@@ -27,7 +28,7 @@ class UsersViewController: UIViewController, UITableViewDelegate, UITableViewDat
     }
 
     
-    override func viewWillAppear(animated: Bool) {
+    override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
         if !configurationOK {
@@ -39,7 +40,7 @@ class UsersViewController: UIViewController, UITableViewDelegate, UITableViewDat
     }
     
     
-    override func viewDidAppear(animated: Bool) {
+    override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
         if nickname == nil {
@@ -58,26 +59,25 @@ class UsersViewController: UIViewController, UITableViewDelegate, UITableViewDat
     // MARK: - Navigation
 
     // In a storyboard-based application, you will often want to do a little preparation before navigation
-    override func prepareForSegue(segue: UIStoryboardSegue, sender: AnyObject?) {
+    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         if let identifier = segue.identifier {
             if identifier == "idSegueJoinChat" {
-                let chatViewController = segue.destinationViewController as! ChatViewController
+                let chatViewController = segue.destination as! ChatViewController
                 chatViewController.nickname = nickname
             }
         }
     }
-
     
     // MARK: IBAction Methods
     
     @IBAction func exitChat(sender: AnyObject) {
-        SocketIOManager.sharedInstance.exitChatWithNickname(nickname) { () -> Void in
-            dispatch_async(dispatch_get_main_queue(), { () -> Void in
+        SocketIOManager.sharedInstance.exitChatWithNickname(nickname: nickname) {
+            DispatchQueue.main.async {
                 self.nickname = nil
                 self.users.removeAll()
-                self.tblUserList.hidden = true
+                self.tblUserList.isHidden = true
                 self.askForNickname()
-            })
+            }
         }
     }
 
@@ -93,39 +93,38 @@ class UsersViewController: UIViewController, UITableViewDelegate, UITableViewDat
     func configureTableView() {
         tblUserList.delegate = self
         tblUserList.dataSource = self
-        tblUserList.registerNib(UINib(nibName: "UserCell", bundle: nil), forCellReuseIdentifier: "idCellUser")
-        tblUserList.hidden = true
-        tblUserList.tableFooterView = UIView(frame: CGRectZero)
+        tblUserList.register(UINib(nibName: "UserCell", bundle: nil), forCellReuseIdentifier: "idCellUser")
+        tblUserList.isHidden = true
+        tblUserList.tableFooterView = UIView(frame: .zero)
     }
     
     
     func askForNickname() {
-        let alertController = UIAlertController(title: "SocketChat", message: "Please enter a nickname:", preferredStyle: UIAlertControllerStyle.Alert)
+        let alertController = UIAlertController(title: "SocketChat", message: "Please enter a nickname:", preferredStyle: UIAlertController.Style.alert)
         
-        alertController.addTextFieldWithConfigurationHandler(nil)
+        alertController.addTextField(configurationHandler: nil)
         
-        let OKAction = UIAlertAction(title: "OK", style: UIAlertActionStyle.Default) { (action) -> Void in
+        let OKAction = UIAlertAction(title: "OK", style: UIAlertAction.Style.default) { (action) -> Void in
             let textfield = alertController.textFields![0]
-            if textfield.text?.characters.count == 0 {
+            if textfield.text?.count == 0 {
                 self.askForNickname()
             }
             else {
                 self.nickname = textfield.text
-                
-                SocketIOManager.sharedInstance.connectToServerWithNickname(self.nickname, completionHandler: { (userList) -> Void in
-                    dispatch_async(dispatch_get_main_queue(), { () -> Void in
-                        if userList != nil {
+                SocketIOManager.sharedInstance.connectToServerWithNickname(nickname: self.nickname) { (userList) in
+                    DispatchQueue.main.async {
+                        if let userList = userList {
                             self.users = userList
                             self.tblUserList.reloadData()
-                            self.tblUserList.hidden = false
+                            self.tblUserList.isHidden = false
                         }
-                    })
-                })
+                    }
+                }
             }
         }
         
         alertController.addAction(OKAction)
-        presentViewController(alertController, animated: true, completion: nil)
+        present(alertController, animated: true, completion: nil)
     }
     
     
@@ -136,23 +135,21 @@ class UsersViewController: UIViewController, UITableViewDelegate, UITableViewDat
     }
     
     
-    func tableView(tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         return users.count
     }
     
-    
-    func tableView(tableView: UITableView, cellForRowAtIndexPath indexPath: NSIndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCellWithIdentifier("idCellUser", forIndexPath: indexPath) as! UserCell
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "idCellUser", for: indexPath as IndexPath) as! UserCell
         
         cell.textLabel?.text = users[indexPath.row]["nickname"] as? String
         cell.detailTextLabel?.text = (users[indexPath.row]["isConnected"] as! Bool) ? "Online" : "Offline"
-        cell.detailTextLabel?.textColor = (users[indexPath.row]["isConnected"] as! Bool) ? UIColor.greenColor() : UIColor.redColor()
+        cell.detailTextLabel?.textColor = (users[indexPath.row]["isConnected"] as! Bool) ? UIColor.green : UIColor.red
         
         return cell
     }
     
-    
-    func tableView(tableView: UITableView, heightForRowAtIndexPath indexPath: NSIndexPath) -> CGFloat {
+    func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
         return 44.0
     }
     
